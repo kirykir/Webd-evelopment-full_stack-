@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const path = require('path');
 require('dotenv').config();
 
 const postsRouter = require('./routes/posts');
@@ -7,28 +8,19 @@ const postsRouter = require('./routes/posts');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-async function connectToDatabase() {
-  if (!process.env.MONGODB_URI) {
-    console.warn('MONGODB_URI is missing. Create a .env file in backend/ before testing database features.');
-    return;
-  }
-
-  try {
-    await mongoose.connect(process.env.MONGODB_URI, {
-      dbName: 'blog'
-    });
-
-    console.log('Connected to MongoDB');
-  } catch (error) {
-    console.error(`MongoDB connection error: ${error.message}`);
-  }
-}
-
 app.use(express.json());
 app.use('/api/posts', postsRouter);
 
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+const frontendPath = path.join(__dirname, '../frontend/dist');
+
+app.use(express.static(frontendPath));
+
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'Route not found' });
+  }
+
+  res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 app.use((error, req, res, next) => {
@@ -36,10 +28,23 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: 'Server error' });
 });
 
-connectToDatabase().then(() => {
-  app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
-    console.log('Mounted routers:');
-    console.log('  /api/posts -> routes/posts.js');
+async function startServer() {
+  if (!process.env.MONGODB_URI) {
+    throw new Error('MONGODB_URI is missing');
+  }
+
+  await mongoose.connect(process.env.MONGODB_URI, {
+    dbName: 'blog'
   });
+
+  console.log('Connected to MongoDB');
+
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+}
+
+startServer().catch(error => {
+  console.error('Startup failed:', error.message);
+  process.exit(1);
 });
